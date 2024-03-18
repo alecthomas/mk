@@ -26,7 +26,7 @@ jobs:
           export TARGET_PATH=target/release/mktg-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
           mv target/release/mktg ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
-          echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_ENV
+          echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
           path: ${{ steps.build.outputs.TARGET_PATH }}
