@@ -13,7 +13,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 /// all subsequent arguments up to "--". If a "--" argument is present, all
 /// arguments after it are executed as a command if any input is newer than all
 /// outputs.
-fn main() {
+fn main() -> Result<(), Error> {
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(EnvFilter::from_env("MK_LOG"))
@@ -46,26 +46,14 @@ Use MK_LOG=trace to see debug output.
         );
         exit(0);
     }
-    match Newer::new(args) {
-        Ok(newer) => {
-            if !newer.should_run_command() {
-                debug!("Nothing to do.");
-                exit(if newer.newer { 1 } else { 0 });
-            } else {
-                match run_command(newer.command) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        exit(1);
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("{}", e);
-            exit(1);
-        }
-    }
+    let newer = Newer::new(args)?;
+    let code = if newer.should_run_command() {
+        run_command(newer.command)?
+    } else {
+        debug!("Nothing to do.");
+        newer.newer.into()
+    };
+    exit(code);
 }
 
 struct Newer {
