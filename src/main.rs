@@ -21,8 +21,147 @@ fn main() {
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        eprintln!(
-            r#"Usage: mk <output>... : <input>... [-- <command>...]
+        display_usage();
+        exit(0);
+    }
+    match Target::parse(args) {
+        Ok(target) => {
+            if !target.should_run_command() {
+                debug!("Nothing to do.");
+                exit(if target.needs_rebuild { 1 } else { 0 });
+            } else {
+                match target.run_command() {
+                    Ok(_) => {}
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        exit(1);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            exit(1);
+        }
+    }
+}
+
+struct Target {
+    command: Vec<String>,
+    needs_rebuild: bool,
+}
+
+impl Target {
+    // Parse the arguments into a Target struct.
+    fn parse(args: Vec<String>) -> Result<Target, Error> {
+        enum State {
+            Output,
+            Input,
+            Command,
+        }
+
+        use State::*;
+
+        let mut newest_output: SystemTime = SystemTime::UNIX_EPOCH;
+        let mut command = Vec::<String>::new();
+        let mut state = Output;
+        let mut have_inputs = false;
+        let mut newer = false;
+
+        for arg in args {
+            match (&state, arg.as_str()) {
+                (Output, ":") => state = Input,
+                (Output, _) => {
+                    let newest = match find_newest(&arg) {
+                        Ok(newest) => newest,
+                        Err(e) if e.kind() == ErrorKind::NotFound => continue,
+                        Err(e) => return Err(e),
+                    };
+                    if newest > newest_output {
+                        debug!("{} is the newest output", arg);
+                        newest_output = newest
+                    }
+                }
+                (Input, "--") => state = Command,
+                (Input, _) => {
+                    have_inputs = true;
+                    let newest = find_newest(&arg)?;
+                    if newest > newest_output {
+                        debug!("input {} is newer than newest output, rebuilding", arg);
+                        newer = true;
+                    } else {
+                        trace!("input {} is not newer than newest output", arg)
+                    }
+                }
+                (Command, _) => command.push(arg),
+            }
+        }
+        // Always rebuild if no inputs are provided.
+        if !have_inputs {
+            trace!("no inputs provided, forcing rebuild");
+            newer = true;
+        }
+        Ok(Target {
+            command,
+            needs_rebuild: newer,
+        })
+    }
+
+    fn should_run_command(&self) -> bool {
+        self.needs_rebuild && !self.command.is_empty()
+    }
+
+    fn run_command(&self) -> Result<i32, Error> {
+        let mut shell_command = if self.command.len() > 1 {
+            shell_words::join(&self.command)
+        } else {
+            self.command[0].clone()
+        };
+        // If the command starts with `@`, don't echo it.
+        if shell_command.starts_with('@') {
+            shell_command = shell_command[1..].to_string();
+        } else {
+            println!("{}", &shell_command);
+        }
+        Ok(std::process::Command::new("bash")
+            .args(vec!["-c", shell_command.as_str()])
+            .status()?
+            .code()
+            .unwrap_or(-1))
+    }
+}
+
+/// Recurse into directories to find the newest file.
+fn find_newest(path: &str) -> Result<SystemTime, Error> {
+    let mut newest = SystemTime::UNIX_EPOCH;
+    let metadata =
+        std::fs::metadata(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
+
+    if !metadata.is_dir() {
+        let modified = metadata.modified()?;
+        return if modified > newest {
+            Ok(modified)
+        } else {
+            Ok(newest)
+        };
+    }
+
+    for entry in
+        std::fs::read_dir(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
+    {
+        if let Some(path) = entry?.path().to_str() {
+            let modified = find_newest(path)?;
+            if modified > newest {
+                newest = modified;
+            }
+        }
+    }
+    Ok(newest)
+}
+
+fn display_usage() {
+    eprintln!(
+        r#"Usage: mk <output>... : <input>... [-- <command>...]
 
 One-liner "make" targets on the command-line.
 
@@ -43,135 +182,5 @@ Like make, if a command is prefixed with @ it will not be echoed.
 
 Use MK_LOG=trace to see debug output.
 "#
-        );
-        exit(0);
-    }
-    match Newer::new(args) {
-        Ok(newer) => {
-            if !newer.should_run_command() {
-                debug!("Nothing to do.");
-                exit(if newer.newer { 1 } else { 0 });
-            } else {
-                match run_command(newer.command) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        exit(1);
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("{}", e);
-            exit(1);
-        }
-    }
-}
-
-struct Newer {
-    command: Vec<String>,
-    newer: bool,
-}
-
-impl Newer {
-    fn new(args: Vec<String>) -> Result<Newer, Error> {
-        enum State {
-            Output,
-            Input,
-            Command,
-        }
-
-        use State::*;
-
-        let mut newest_output: SystemTime = SystemTime::UNIX_EPOCH;
-        let mut command = Vec::<String>::new();
-        let mut state = Output;
-        let mut have_inputs = false;
-        let mut newer = false;
-
-        for arg in args {
-            match (&state, arg.as_str()) {
-                (Output, ":") => state = Input,
-                (Output, _) => {
-                    let newest = match find_newest(arg.clone()) {
-                        Ok(newest) => newest,
-                        Err(e) if e.kind() == ErrorKind::NotFound => continue,
-                        Err(e) => return Err(e),
-                    };
-                    if newest > newest_output {
-                        debug!("{} is the newest output", arg);
-                        newest_output = newest
-                    }
-                }
-                (Input, "--") => state = Command,
-                (Input, _) => {
-                    have_inputs = true;
-                    let newest = find_newest(arg.clone())?;
-                    if newest > newest_output {
-                        debug!("input {} is newer than newest output, rebuilding", arg);
-                        newer = true;
-                    } else {
-                        trace!("input {} is not newer than newest output", arg)
-                    }
-                }
-                (Command, _) => command.push(arg),
-            }
-        }
-        // Always rebuild if no inputs are provided.
-        if !have_inputs {
-            trace!("no inputs provided, forcing rebuild");
-            newer = true;
-        }
-        Ok(Newer { command, newer })
-    }
-
-    fn should_run_command(&self) -> bool {
-        self.newer && !self.command.is_empty()
-    }
-}
-
-fn run_command(command: Vec<String>) -> Result<i32, Error> {
-    let mut shell_command = if command.len() > 1 {
-        shell_words::join(command)
-    } else {
-        command[0].clone()
-    };
-    // If the command starts with `@`, don't echo it.
-    if shell_command.starts_with('@') {
-        shell_command = shell_command[1..].to_string();
-    } else {
-        println!("{}", &shell_command);
-    }
-    Ok(std::process::Command::new("bash")
-        .args(vec!["-c", shell_command.as_str()])
-        .status()?
-        .code()
-        .unwrap_or(-1))
-}
-
-fn find_newest(path: String) -> Result<SystemTime, Error> {
-    let mut newest = SystemTime::UNIX_EPOCH;
-    let metadata = std::fs::metadata(path.clone())
-        .map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
-
-    if !metadata.is_dir() {
-        let modified = metadata.modified()?;
-        return if modified > newest {
-            Ok(modified)
-        } else {
-            Ok(newest)
-        };
-    }
-
-    for entry in
-        std::fs::read_dir(path.clone()).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        let modified = find_newest(path.to_str().unwrap().to_string())?;
-        if modified > newest {
-            newest = modified;
-        }
-    }
-    Ok(newest)
+    );
 }
