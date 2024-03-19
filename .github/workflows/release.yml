@@ -6,14 +6,11 @@ on:
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: true
-name: Release
+name: Release x86_64-unknown-linux-gnu
 jobs:
-  build:
-    name: Build
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: cashapp/activate-hermit@v1
@@ -22,19 +19,24 @@ jobs:
       - id: build
         shell: bash
         run: |
-          cargo build --release
+          rustup install stable
+          cargo build --release --target x86_64-unknown-linux-gnu
           export TARGET_PATH=target/release/mktg-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
           mv target/release/mktg ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
-          name: mktg-${{ matrix.os }}
+          name: mktg-linux-x86_64
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  build-macos-aarch64:
+  build-macos:
+    name: Build ${{ matrix.target }}
     runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
     steps:
       - uses: actions/checkout@v2
       - uses: cashapp/activate-hermit@v1
@@ -43,21 +45,23 @@ jobs:
       - id: build
         shell: bash
         run: |
-          cargo build --release --target aarch64-apple-darwin
-          export TARGET_PATH=target/aarch64-apple-darwin/release/mktg
-          mv target/aarch64-apple-darwin/release/mktg ${TARGET_PATH}
+          rustup install stable
+          rustup target add ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }}
+          export TARGET_PATH=target/${{ matrix.target }}/release/mktg
+          mv target/${{ matrix.target }}/release/mktg ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
-          name: mktg-darwin-aarch64
+          name: mktg-${{ matrix.target }}
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [build, build-macos-aarch64]
+    needs: [build-linux, build-macos]
     permissions:
       contents: write
     steps:
