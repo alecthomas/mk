@@ -1,6 +1,6 @@
 use std::{
     io::{Error, ErrorKind},
-    process::exit,
+    process::{exit, Output},
     time::SystemTime,
 };
 use tracing::{debug, trace};
@@ -68,6 +68,12 @@ Use MK_LOG=trace to see debug output.
     }
 }
 
+enum State {
+    Output,
+    Input,
+    Command,
+}
+
 struct Newer {
     command: Vec<String>,
     newer: bool,
@@ -77,24 +83,24 @@ impl Newer {
     fn new(args: Vec<String>) -> Result<Newer, Error> {
         let mut newest_output: SystemTime = SystemTime::UNIX_EPOCH;
         let mut command = Vec::<String>::new();
-        let mut state = 'O';
+        let mut state = State::Output;
         let mut have_inputs = false;
         let mut newer = false;
 
         for arg in args {
             match arg.as_str() {
                 ":" => {
-                    state = 'I';
+                    state = State::Input;
                     continue;
                 }
                 "--" => {
-                    state = 'C';
+                    state = State::Command;
                     continue;
                 }
                 _ => (),
             }
             match state {
-                'O' => {
+                State::Output => {
                     let newest = match find_newest(arg.clone()) {
                         Ok(newest) => newest,
                         Err(e) => {
@@ -110,7 +116,7 @@ impl Newer {
                         newest_output = newest
                     }
                 }
-                'I' => {
+                State::Input => {
                     have_inputs = true;
                     let newest = find_newest(arg.clone())?;
                     if newest > newest_output {
@@ -120,8 +126,7 @@ impl Newer {
                         trace!("input {} is not newer than newest output", arg)
                     }
                 }
-                'C' => command.push(arg),
-                _ => unreachable!(),
+                State::Command => command.push(arg),
             }
         }
         // Always rebuild if no inputs are provided.
