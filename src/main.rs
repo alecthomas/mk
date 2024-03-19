@@ -1,7 +1,9 @@
 use std::{
     io::{Error, ErrorKind},
+    process::exit,
     time::SystemTime,
 };
+use tracing::{debug, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Compare timestamps of inputs and outputs, exiting with a non-zero status if
@@ -38,25 +40,25 @@ eg.
 Use MKTG_LOG=trace to see debug output.
 "#
         );
-        std::process::exit(0);
+        exit(0);
     }
     match Newer::new(args) {
         Ok(newer) => {
             if !newer.should_run_command() {
-                tracing::debug!("Nothing to do.");
+                debug!("Nothing to do.");
             } else {
                 match run_command(newer.command) {
                     Ok(_) => {}
                     Err(e) => {
                         eprintln!("{}", e);
-                        std::process::exit(1);
+                        exit(1);
                     }
                 }
             }
         }
         Err(e) => {
             eprintln!("{}", e);
-            std::process::exit(1);
+            exit(1);
         }
     }
 }
@@ -98,17 +100,17 @@ impl Newer {
                         }
                     };
                     if newest > newest_output {
-                        tracing::debug!("{} is the newest output", arg);
+                        debug!("{} is the newest output", arg);
                         newest_output = newest
                     }
                 }
                 'I' => {
                     let newest = find_newest(arg.clone())?;
                     if newest > newest_output {
-                        tracing::trace!("input {} is newer than newest output", arg);
+                        trace!("input {} is newer than newest output", arg);
                         newer = true;
                     } else {
-                        tracing::trace!("input {} is not newer than newest output", arg)
+                        trace!("input {} is not newer than newest output", arg)
                     }
                 }
                 'C' => command.push(arg),
