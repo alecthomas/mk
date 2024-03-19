@@ -1,6 +1,6 @@
-# One-liner "make" targets
+# One-liner "make" targets on the command-line
 
-Usage: `mktg <output>... : <input>... [-- <command>...]`
+Usage: `mk <output>... : <input>... [-- <command>...]`
 
 Compare timestamps of inputs and outputs, exiting with a non-zero status
 or executing command if any input is newer than all outputs. If an input or
@@ -12,7 +12,7 @@ joined with shell quoting.
 
 eg.
 
-    mktg main.o : main.c -- cc -c main.c && \
-        mktg main : main.o -- cc -o main main.o
+    mk main.o : main.c -- cc -c main.c && \
+        mk main : main.o -- cc -o main main.o
 
-Use MKTG_LOG=trace to see debug output.
+Use MK_LOG=trace to see debug output.

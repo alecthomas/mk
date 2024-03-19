@@ -16,13 +16,15 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 fn main() {
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_env("MKTG_LOG"))
+        .with(EnvFilter::from_env("mk_LOG"))
         .init();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
         eprintln!(
-            r#"Usage: mktg <output>... : <input>... [-- <command>...]
+            r#"Usage: mk <output>... : <input>... [-- <command>...]
+
+One-liner "make" targets on the command-line.
 
 Compare timestamps of inputs and outputs, exiting with a non-zero status
 or executing command if any input is newer than all outputs. If an input or
@@ -34,10 +36,10 @@ joined with shell quoting.
 
 eg.
 
-    mktg main.o : main.c -- cc -c main.c && \
-        mktg main : main.o -- cc -o main main.o
+    mk main.o : main.c -- cc -c main.c && \
+        mk main : main.o -- cc -o main main.o
 
-Use MKTG_LOG=trace to see debug output.
+Use MK_LOG=trace to see debug output.
 "#
         );
         exit(0);

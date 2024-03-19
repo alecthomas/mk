@@ -25,13 +25,13 @@ jobs:
           rustup install stable
           rustup target add ${{ matrix.target }}
           cargo build --release --target ${{ matrix.target }}
-          export TARGET_PATH=target/${{ matrix.target }}/release/mktg-${{ matrix.target }}
-          mv target/${{ matrix.target }}/release/mktg ${TARGET_PATH}
+          export TARGET_PATH=target/${{ matrix.target }}/release/mk-${{ matrix.target }}
+          mv target/${{ matrix.target }}/release/mk ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
-          name: mktg-${{ matrix.target }}
+          name: mk-${{ matrix.target }}
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -52,13 +52,13 @@ jobs:
           rustup install stable
           rustup target add ${{ matrix.target }}
           cargo build --release --target ${{ matrix.target }}
-          export TARGET_PATH=target/${{ matrix.target }}/release/mktg-${{ matrix.target }}
-          mv target/${{ matrix.target }}/release/mktg ${TARGET_PATH}
+          export TARGET_PATH=target/${{ matrix.target }}/release/mk-${{ matrix.target }}
+          mv target/${{ matrix.target }}/release/mk ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
-          name: mktg-${{ matrix.target }}
+          name: mk-${{ matrix.target }}
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,4 +74,4 @@ jobs:
           merge-multiple: true
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "mktg-*.bz2"
+          artifacts: "mk-*.bz2"
