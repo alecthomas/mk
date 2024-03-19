@@ -33,6 +33,10 @@ jobs:
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set SDKROOT
+        run: echo "SDKROOT=$(xcrun -sdk macosx11.1 --show-sdk-path)" >> $GITHUB_ENV
+      - name: Set MACOSX_DEPLOYMENT_TARGET
+        run: echo "MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.1 --show-sdk-platform-version)" >> $GITHUB_ENV
       - id: build-macos-aarch64
         if: matrix.os == 'macos-latest'
         shell: bash
