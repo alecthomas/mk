@@ -1,10 +1,8 @@
 use std::{
-    env,
     io::{Error, ErrorKind},
     time::SystemTime,
 };
-use tracing::Level;
-use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Compare timestamps of inputs and outputs, exiting with a non-zero status if
 /// any input is newer than all outputs.
@@ -14,14 +12,10 @@ use tracing_subscriber::FmtSubscriber;
 /// arguments after it are executed as a command if any input is newer than all
 /// outputs.
 fn main() {
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(if env::var("DEBUG").unwrap_or("".to_string()).is_empty() {
-            Level::INFO
-        } else {
-            Level::TRACE
-        })
-        .finish();
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_env("MKTG_LOG"))
+        .init();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
@@ -41,7 +35,7 @@ eg.
     mktg main.o : main.c -- cc -c main.c && \
         mktg main : main.o -- cc -o main main.o
 
-Use RUST_LOG=trace to see debug output.
+Use MKTG_LOG=trace to see debug output.
 "#
         );
         std::process::exit(0);

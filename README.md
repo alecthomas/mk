@@ -14,3 +14,5 @@ eg.
 
     mktg main.o : main.c -- cc -c main.c && \
         mktg main : main.o -- cc -o main main.o
+
+Use MKTG_LOG=trace to see debug output.
