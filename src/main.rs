@@ -157,7 +157,8 @@ fn run_command(command: Vec<String>) -> Result<i32, Error> {
 
 fn find_newest(path: String) -> Result<SystemTime, Error> {
     let mut newest = SystemTime::UNIX_EPOCH;
-    let metadata = std::fs::metadata(path.clone())?;
+    let metadata = std::fs::metadata(path.clone())
+        .map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
 
     if !metadata.is_dir() {
         let modified = metadata.modified()?;
@@ -168,7 +169,9 @@ fn find_newest(path: String) -> Result<SystemTime, Error> {
         };
     }
 
-    for entry in std::fs::read_dir(path.clone())? {
+    for entry in
+        std::fs::read_dir(path.clone()).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
+    {
         let entry = entry?;
         let path = entry.path();
         let modified = find_newest(path.to_str().unwrap().to_string())?;
