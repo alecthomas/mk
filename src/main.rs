@@ -11,22 +11,41 @@ use std::{
 /// arguments after it are executed as a command if any input is newer than all
 /// outputs.
 fn main() {
+    env_logger::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        eprintln!("Usage: mktg <output>... : <input>... [-- <command>...]");
-        std::process::exit(1);
+        eprintln!(
+            r#"Usage: mktg <output>... : <input>... [-- <command>...]
+
+Compare timestamps of inputs and outputs, exiting with a non-zero status
+or executing command if any input is newer than all outputs. If an input or
+output is a directory, it is recursed into.
+
+If a command is provided it is run through "bash -c". If a single command
+argument is provided it will be run as-is, otherwise all arguments will be
+joined with shell quoting.
+
+eg.
+
+    mktg main.o : main.c -- cc -c main.c && \
+        mktg main : main.o -- cc -o main main.o
+
+Use RUST_LOG=trace to see debug output.
+"#
+        );
+        std::process::exit(0);
     }
-    let newer = Newer::new(args);
-    match newer {
+    match Newer::new(args) {
         Ok(newer) => {
             if !newer.should_run_command() {
-                std::process::exit(0);
-            }
-            match run_command(newer.command) {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
+                log::debug!("Nothing to do.");
+            } else {
+                match run_command(newer.command) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
                 }
             }
         }
@@ -63,7 +82,7 @@ impl Newer {
             }
             match state {
                 'O' => {
-                    let newest = match find_newest(arg) {
+                    let newest = match find_newest(arg.clone()) {
                         Ok(newest) => newest,
                         Err(e) => {
                             if e.kind() == ErrorKind::NotFound {
@@ -74,13 +93,17 @@ impl Newer {
                         }
                     };
                     if newest > newest_output {
+                        log::debug!("{} is the newest output", arg);
                         newest_output = newest
                     }
                 }
                 'I' => {
-                    let metadata = std::fs::metadata(&arg)?;
-                    if metadata.modified()? > newest_output {
+                    let newest = find_newest(arg.clone())?;
+                    if newest > newest_output {
+                        log::debug!("input {} is newer than newest output", arg);
                         newer = true;
+                    } else {
+                        log::trace!("input {} is not newer than newest output", arg)
                     }
                 }
                 'C' => command.push(arg),
@@ -96,8 +119,13 @@ impl Newer {
 }
 
 fn run_command(command: Vec<String>) -> Result<i32, Error> {
-    Ok(std::process::Command::new(command[0].clone())
-        .args(command.iter().skip(1))
+    let shell_command = if command.len() > 1 {
+        shell_words::join(command)
+    } else {
+        command[0].clone()
+    };
+    Ok(std::process::Command::new("bash")
+        .args(vec!["-c", shell_command.as_str()])
         .status()?
         .code()
         .unwrap_or(-1))
