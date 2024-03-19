@@ -75,11 +75,11 @@ struct Newer {
 
 impl Newer {
     fn new(args: Vec<String>) -> Result<Newer, Error> {
-        let mut args = args.iter().cloned();
+        let mut args = args.iter();
 
         let newest = args
             .by_ref()
-            .take_while(|a| a != ":")
+            .take_while(|&a| a != ":")
             .map(|arg| match find_newest(arg) {
                 Err(e) if e.kind() == ErrorKind::NotFound => Ok(SystemTime::UNIX_EPOCH),
                 n @ _ => n,
@@ -91,7 +91,7 @@ impl Newer {
 
         let newers = args
             .by_ref()
-            .take_while(|a| a != "--")
+            .take_while(|&a| a != "--")
             .map(|arg| find_newest(arg))
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -102,7 +102,7 @@ impl Newer {
             newers.into_iter().any(|n| n > newest)
         };
 
-        let command = args.collect();
+        let command = args.cloned().collect();
 
         Ok(Newer { command, newer })
     }
@@ -131,10 +131,10 @@ fn run_command(command: Vec<String>) -> Result<i32, Error> {
         .unwrap_or(-1))
 }
 
-fn find_newest(path: String) -> Result<SystemTime, Error> {
+fn find_newest(path: &str) -> Result<SystemTime, Error> {
     let mut newest = SystemTime::UNIX_EPOCH;
-    let metadata = std::fs::metadata(path.clone())
-        .map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
+    let metadata =
+        std::fs::metadata(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
 
     if !metadata.is_dir() {
         let modified = metadata.modified()?;
@@ -146,11 +146,11 @@ fn find_newest(path: String) -> Result<SystemTime, Error> {
     }
 
     for entry in
-        std::fs::read_dir(path.clone()).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
+        std::fs::read_dir(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
     {
         let entry = entry?;
         let path = entry.path();
-        let modified = find_newest(path.to_str().unwrap().to_string())?;
+        let modified = find_newest(path.to_str().unwrap())?;
         if modified > newest {
             newest = modified;
         }
