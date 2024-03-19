@@ -1,7 +1,10 @@
 use std::{
+    env,
     io::{Error, ErrorKind},
     time::SystemTime,
 };
+use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
 
 /// Compare timestamps of inputs and outputs, exiting with a non-zero status if
 /// any input is newer than all outputs.
@@ -11,7 +14,15 @@ use std::{
 /// arguments after it are executed as a command if any input is newer than all
 /// outputs.
 fn main() {
-    env_logger::init();
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(if env::var("DEBUG").unwrap_or("".to_string()).is_empty() {
+            Level::INFO
+        } else {
+            Level::TRACE
+        })
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
         eprintln!(
@@ -38,7 +49,7 @@ Use RUST_LOG=trace to see debug output.
     match Newer::new(args) {
         Ok(newer) => {
             if !newer.should_run_command() {
-                log::debug!("Nothing to do.");
+                tracing::debug!("Nothing to do.");
             } else {
                 match run_command(newer.command) {
                     Ok(_) => {}
@@ -93,17 +104,17 @@ impl Newer {
                         }
                     };
                     if newest > newest_output {
-                        log::debug!("{} is the newest output", arg);
+                        tracing::debug!("{} is the newest output", arg);
                         newest_output = newest
                     }
                 }
                 'I' => {
                     let newest = find_newest(arg.clone())?;
                     if newest > newest_output {
-                        log::debug!("input {} is newer than newest output", arg);
+                        tracing::trace!("input {} is newer than newest output", arg);
                         newer = true;
                     } else {
-                        log::trace!("input {} is not newer than newest output", arg)
+                        tracing::trace!("input {} is not newer than newest output", arg)
                     }
                 }
                 'C' => command.push(arg),
@@ -152,5 +163,5 @@ fn find_newest(path: String) -> Result<SystemTime, Error> {
             newest = modified;
         }
     }
-    return Ok(newest);
+    Ok(newest)
 }
