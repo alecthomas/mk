@@ -68,12 +68,6 @@ Use MK_LOG=trace to see debug output.
     }
 }
 
-enum State {
-    Output,
-    Input,
-    Command,
-}
-
 struct Newer {
     command: Vec<String>,
     newer: bool,
@@ -81,16 +75,24 @@ struct Newer {
 
 impl Newer {
     fn new(args: Vec<String>) -> Result<Newer, Error> {
+        enum State {
+            Output,
+            Input,
+            Command,
+        }
+
+        use State::*;
+
         let mut newest_output: SystemTime = SystemTime::UNIX_EPOCH;
         let mut command = Vec::<String>::new();
-        let mut state = State::Output;
+        let mut state = Output;
         let mut have_inputs = false;
         let mut newer = false;
 
         for arg in args {
             match (&state, arg.as_str()) {
-                (State::Output, ":") => state = State::Input,
-                (State::Output, _) => {
+                (Output, ":") => state = Input,
+                (Output, _) => {
                     let newest = match find_newest(arg.clone()) {
                         Ok(newest) => newest,
                         Err(e) if e.kind() == ErrorKind::NotFound => continue,
@@ -101,8 +103,8 @@ impl Newer {
                         newest_output = newest
                     }
                 }
-                (State::Input, "--") => state = State::Command,
-                (State::Input, _) => {
+                (Input, "--") => state = Command,
+                (Input, _) => {
                     have_inputs = true;
                     let newest = find_newest(arg.clone())?;
                     if newest > newest_output {
@@ -112,7 +114,7 @@ impl Newer {
                         trace!("input {} is not newer than newest output", arg)
                     }
                 }
-                (State::Command, _) => command.push(arg),
+                (Command, _) => command.push(arg),
             }
         }
         // Always rebuild if no inputs are provided.
