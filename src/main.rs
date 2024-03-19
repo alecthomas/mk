@@ -28,10 +28,10 @@ fn main() {
         Ok(target) => {
             if !target.should_run_command() {
                 debug!("Nothing to do.");
-                exit(if target.needs_rebuild { 1 } else { 0 });
+                exit(target.needs_rebuild.into());
             } else {
                 match target.run_command() {
-                    Ok(_) => {}
+                    Ok(code) => exit(code),
                     Err(e) => {
                         eprintln!("{}", e);
                         exit(1);
@@ -73,7 +73,7 @@ impl Target {
                 (Output, ":") => state = Input,
                 (Output, _) => {
                     let newest = match find_newest(&arg) {
-                        Ok(newest) => newest,
+                        Ok(n) => n,
                         Err(e) if e.kind() == ErrorKind::NotFound => continue,
                         Err(e) => return Err(e),
                     };
