@@ -16,7 +16,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 fn main() {
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_env("mk_LOG"))
+        .with(EnvFilter::from_env("MK_LOG"))
         .init();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -39,6 +39,8 @@ eg.
     mk main.o : main.c -- cc -c main.c && \
         mk main : main.o -- cc -o main main.o
 
+Like make, if a command is prefixed with @ it will not be echoed.
+
 Use MK_LOG=trace to see debug output.
 "#
         );
@@ -48,6 +50,7 @@ Use MK_LOG=trace to see debug output.
         Ok(newer) => {
             if !newer.should_run_command() {
                 debug!("Nothing to do.");
+                exit(if newer.newer { 1 } else { 0 });
             } else {
                 match run_command(newer.command) {
                     Ok(_) => {}
@@ -75,6 +78,7 @@ impl Newer {
         let mut newest_output: SystemTime = SystemTime::UNIX_EPOCH;
         let mut command = Vec::<String>::new();
         let mut state = 'O';
+        let mut have_inputs = false;
         let mut newer = false;
 
         for arg in args {
@@ -107,6 +111,7 @@ impl Newer {
                     }
                 }
                 'I' => {
+                    have_inputs = true;
                     let newest = find_newest(arg.clone())?;
                     if newest > newest_output {
                         trace!("input {} is newer than newest output", arg);
@@ -119,6 +124,10 @@ impl Newer {
                 _ => unreachable!(),
             }
         }
+        // Always rebuild if no inputs are provided.
+        if !have_inputs {
+            newer = true;
+        }
         Ok(Newer { command, newer })
     }
 
@@ -128,11 +137,17 @@ impl Newer {
 }
 
 fn run_command(command: Vec<String>) -> Result<i32, Error> {
-    let shell_command = if command.len() > 1 {
+    let mut shell_command = if command.len() > 1 {
         shell_words::join(command)
     } else {
         command[0].clone()
     };
+    // If the command starts with `@`, don't echo it.
+    if shell_command.starts_with('@') {
+        shell_command = shell_command[1..].to_string();
+    } else {
+        println!("{}", &shell_command);
+    }
     Ok(std::process::Command::new("bash")
         .args(vec!["-c", shell_command.as_str()])
         .status()?
