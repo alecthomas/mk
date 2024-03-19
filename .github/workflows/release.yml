@@ -9,7 +9,7 @@ concurrency:
 name: Release
 jobs:
   build-linux:
-    name: Build Linux
+    name: Build ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -24,7 +24,7 @@ jobs:
         run: |
           rustup install stable
           cargo build --release --target x86_64-unknown-linux-gnu
-          export TARGET_PATH=target/${{ matrix.target }}/release/mktg-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)
+          export TARGET_PATH=target/${{ matrix.target }}/release/mktg-${{ matrix.target }}
           mv target/${{ matrix.target }}/release/mktg ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
@@ -51,7 +51,7 @@ jobs:
           rustup install stable
           rustup target add ${{ matrix.target }}
           cargo build --release --target ${{ matrix.target }}
-          export TARGET_PATH=target/${{ matrix.target }}/release/mktg
+          export TARGET_PATH=target/${{ matrix.target }}/release/mktg-${{ matrix.target }}
           mv target/${{ matrix.target }}/release/mktg ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
