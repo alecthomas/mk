@@ -33,6 +33,21 @@ jobs:
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: build-macos-aarch64
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          export TARGET_PATH=target/aarch64-apple-darwin/release/mktg
+          mv target/aarch64-apple-darwin/release/mktg ${TARGET_PATH}
+          bzip2 -f9 ${TARGET_PATH}
+          echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mktg-${{ matrix.os }}-aarch64
+          path: ${{ steps.build.outputs.TARGET_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   release:
     name: Release
     runs-on: ubuntu-latest
