@@ -36,6 +36,10 @@ jobs:
   build-macos-aarch64:
     runs-on: macos-latest
     steps:
+      - uses: actions/checkout@v2
+      - uses: cashapp/activate-hermit@v1
+        with:
+          cache: true
       - id: build
         shell: bash
         run: |
