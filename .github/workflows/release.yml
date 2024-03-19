@@ -33,12 +33,10 @@ jobs:
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set SDKROOT
-        run: echo "SDKROOT=$(xcrun -sdk macosx11.1 --show-sdk-path)" >> $GITHUB_ENV
-      - name: Set MACOSX_DEPLOYMENT_TARGET
-        run: echo "MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.1 --show-sdk-platform-version)" >> $GITHUB_ENV
-      - id: build-macos-aarch64
-        if: matrix.os == 'macos-latest'
+  build-macos-aarch64:
+    runs-on: macos-latest
+    steps:
+      - id: build
         shell: bash
         run: |
           cargo build --release --target aarch64-apple-darwin
@@ -48,14 +46,14 @@ jobs:
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
-          name: mktg-${{ matrix.os }}-aarch64
+          name: mktg-darwin-aarch64
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, build-macos-aarch64]
     permissions:
       contents: write
     steps:
