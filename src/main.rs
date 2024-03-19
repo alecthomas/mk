@@ -3,7 +3,7 @@ use std::{
     process::exit,
     time::SystemTime,
 };
-use tracing::{debug, trace};
+use tracing::debug;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Compare timestamps of inputs and outputs, exiting with a non-zero status if
@@ -75,53 +75,35 @@ struct Newer {
 
 impl Newer {
     fn new(args: Vec<String>) -> Result<Newer, Error> {
-        enum State {
-            Output,
-            Input,
-            Command,
-        }
+        let mut args = args.iter().cloned();
 
-        use State::*;
+        let newest = args
+            .by_ref()
+            .take_while(|a| a != ":")
+            .map(|arg| match find_newest(arg) {
+                Err(e) if e.kind() == ErrorKind::NotFound => Ok(SystemTime::UNIX_EPOCH),
+                n @ _ => n,
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .max()
+            .unwrap_or(SystemTime::UNIX_EPOCH);
 
-        let mut newest_output: SystemTime = SystemTime::UNIX_EPOCH;
-        let mut command = Vec::<String>::new();
-        let mut state = Output;
-        let mut have_inputs = false;
-        let mut newer = false;
+        let newers = args
+            .by_ref()
+            .take_while(|a| a != "--")
+            .map(|arg| find_newest(arg))
+            .collect::<Result<Vec<_>, _>>()?;
 
-        for arg in args {
-            match (&state, arg.as_str()) {
-                (Output, ":") => state = Input,
-                (Output, _) => {
-                    let newest = match find_newest(arg.clone()) {
-                        Ok(newest) => newest,
-                        Err(e) if e.kind() == ErrorKind::NotFound => continue,
-                        Err(e) => return Err(e),
-                    };
-                    if newest > newest_output {
-                        debug!("{} is the newest output", arg);
-                        newest_output = newest
-                    }
-                }
-                (Input, "--") => state = Command,
-                (Input, _) => {
-                    have_inputs = true;
-                    let newest = find_newest(arg.clone())?;
-                    if newest > newest_output {
-                        debug!("input {} is newer than newest output, rebuilding", arg);
-                        newer = true;
-                    } else {
-                        trace!("input {} is not newer than newest output", arg)
-                    }
-                }
-                (Command, _) => command.push(arg),
-            }
-        }
         // Always rebuild if no inputs are provided.
-        if !have_inputs {
-            trace!("no inputs provided, forcing rebuild");
-            newer = true;
-        }
+        let newer = if newers.is_empty() {
+            true
+        } else {
+            newers.into_iter().any(|n| n > newest)
+        };
+
+        let command = args.collect();
+
         Ok(Newer { command, newer })
     }
 
