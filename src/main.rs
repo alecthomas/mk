@@ -1,6 +1,6 @@
 use std::{
     io::{Error, ErrorKind},
-    process::{exit, Output},
+    process::exit,
     time::SystemTime,
 };
 use tracing::{debug, trace};
@@ -88,49 +88,36 @@ impl Newer {
         let mut newer = false;
 
         for arg in args {
-            match arg.as_str() {
-                ":" => {
-                    state = State::Input;
-                    continue;
-                }
-                "--" => {
-                    state = State::Command;
-                    continue;
-                }
-                _ => (),
-            }
-            match state {
-                State::Output => {
+            match (&state, arg.as_str()) {
+                (State::Output, ":") => state = State::Input,
+                (State::Output, _) => {
                     let newest = match find_newest(arg.clone()) {
                         Ok(newest) => newest,
-                        Err(e) => {
-                            if e.kind() == ErrorKind::NotFound {
-                                continue;
-                            } else {
-                                return Err(e);
-                            }
-                        }
+                        Err(e) if e.kind() == ErrorKind::NotFound => continue,
+                        Err(e) => return Err(e),
                     };
                     if newest > newest_output {
                         debug!("{} is the newest output", arg);
                         newest_output = newest
                     }
                 }
-                State::Input => {
+                (State::Input, "--") => state = State::Command,
+                (State::Input, _) => {
                     have_inputs = true;
                     let newest = find_newest(arg.clone())?;
                     if newest > newest_output {
-                        trace!("input {} is newer than newest output", arg);
+                        debug!("input {} is newer than newest output, rebuilding", arg);
                         newer = true;
                     } else {
                         trace!("input {} is not newer than newest output", arg)
                     }
                 }
-                State::Command => command.push(arg),
+                (State::Command, _) => command.push(arg),
             }
         }
         // Always rebuild if no inputs are provided.
         if !have_inputs {
+            trace!("no inputs provided, forcing rebuild");
             newer = true;
         }
         Ok(Newer { command, newer })
