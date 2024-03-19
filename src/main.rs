@@ -3,7 +3,7 @@ use std::{
     process::exit,
     time::SystemTime,
 };
-use tracing::{debug, trace};
+use tracing::debug;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Compare timestamps of inputs and outputs, exiting with a non-zero status if
@@ -13,7 +13,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 /// all subsequent arguments up to "--". If a "--" argument is present, all
 /// arguments after it are executed as a command if any input is newer than all
 /// outputs.
-fn main() {
+fn main() -> Result<(), Error> {
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(EnvFilter::from_env("MK_LOG"))
@@ -46,26 +46,14 @@ Use MK_LOG=trace to see debug output.
         );
         exit(0);
     }
-    match Newer::new(args) {
-        Ok(newer) => {
-            if !newer.should_run_command() {
-                debug!("Nothing to do.");
-                exit(if newer.newer { 1 } else { 0 });
-            } else {
-                match run_command(newer.command) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        exit(1);
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("{}", e);
-            exit(1);
-        }
-    }
+    let newer = Newer::new(args)?;
+    let code = if newer.should_run_command() {
+        run_command(newer.command)?
+    } else {
+        debug!("Nothing to do.");
+        newer.newer.into()
+    };
+    exit(code);
 }
 
 struct Newer {
@@ -75,53 +63,35 @@ struct Newer {
 
 impl Newer {
     fn new(args: Vec<String>) -> Result<Newer, Error> {
-        enum State {
-            Output,
-            Input,
-            Command,
-        }
+        let mut args = args.iter();
 
-        use State::*;
+        let newest = args
+            .by_ref()
+            .take_while(|&a| a != ":")
+            .map(|arg| match find_newest(arg) {
+                Err(e) if e.kind() == ErrorKind::NotFound => Ok(SystemTime::UNIX_EPOCH),
+                n @ _ => n,
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .max()
+            .unwrap_or(SystemTime::UNIX_EPOCH);
 
-        let mut newest_output: SystemTime = SystemTime::UNIX_EPOCH;
-        let mut command = Vec::<String>::new();
-        let mut state = Output;
-        let mut have_inputs = false;
-        let mut newer = false;
+        let newers = args
+            .by_ref()
+            .take_while(|&a| a != "--")
+            .map(|arg| find_newest(arg))
+            .collect::<Result<Vec<_>, _>>()?;
 
-        for arg in args {
-            match (&state, arg.as_str()) {
-                (Output, ":") => state = Input,
-                (Output, _) => {
-                    let newest = match find_newest(arg.clone()) {
-                        Ok(newest) => newest,
-                        Err(e) if e.kind() == ErrorKind::NotFound => continue,
-                        Err(e) => return Err(e),
-                    };
-                    if newest > newest_output {
-                        debug!("{} is the newest output", arg);
-                        newest_output = newest
-                    }
-                }
-                (Input, "--") => state = Command,
-                (Input, _) => {
-                    have_inputs = true;
-                    let newest = find_newest(arg.clone())?;
-                    if newest > newest_output {
-                        debug!("input {} is newer than newest output, rebuilding", arg);
-                        newer = true;
-                    } else {
-                        trace!("input {} is not newer than newest output", arg)
-                    }
-                }
-                (Command, _) => command.push(arg),
-            }
-        }
         // Always rebuild if no inputs are provided.
-        if !have_inputs {
-            trace!("no inputs provided, forcing rebuild");
-            newer = true;
-        }
+        let newer = if newers.is_empty() {
+            true
+        } else {
+            newers.into_iter().any(|n| n > newest)
+        };
+
+        let command = args.cloned().collect();
+
         Ok(Newer { command, newer })
     }
 
@@ -149,10 +119,10 @@ fn run_command(command: Vec<String>) -> Result<i32, Error> {
         .unwrap_or(-1))
 }
 
-fn find_newest(path: String) -> Result<SystemTime, Error> {
+fn find_newest(path: &str) -> Result<SystemTime, Error> {
     let mut newest = SystemTime::UNIX_EPOCH;
-    let metadata = std::fs::metadata(path.clone())
-        .map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
+    let metadata =
+        std::fs::metadata(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
 
     if !metadata.is_dir() {
         let modified = metadata.modified()?;
@@ -164,11 +134,11 @@ fn find_newest(path: String) -> Result<SystemTime, Error> {
     }
 
     for entry in
-        std::fs::read_dir(path.clone()).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
+        std::fs::read_dir(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
     {
         let entry = entry?;
         let path = entry.path();
-        let modified = find_newest(path.to_str().unwrap().to_string())?;
+        let modified = find_newest(path.to_str().unwrap())?;
         if modified > newest {
             newest = modified;
         }
