@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     io::{Error, ErrorKind},
     process::exit,
     time::SystemTime,
@@ -62,7 +63,10 @@ impl Target {
 
         use State::*;
 
-        let mut newest_output: SystemTime = SystemTime::UNIX_EPOCH;
+        let mut newest_output = File {
+            modified: SystemTime::UNIX_EPOCH,
+            path: String::new(),
+        };
         let mut command = Vec::<String>::new();
         let mut state = Output;
         let mut have_inputs = false;
@@ -78,7 +82,7 @@ impl Target {
                         Err(e) => return Err(e),
                     };
                     if newest > newest_output {
-                        debug!("{} is the newest output", arg);
+                        debug!("{} is the newest output", newest);
                         newest_output = newest
                     }
                 }
@@ -87,10 +91,10 @@ impl Target {
                     have_inputs = true;
                     let newest = find_newest(&arg)?;
                     if newest > newest_output {
-                        debug!("input {} is newer than newest output, rebuilding", arg);
+                        debug!("input {} is newer than newest output, rebuilding", newest);
                         newer = true;
                     } else {
-                        trace!("input {} is not newer than newest output", arg)
+                        trace!("input {} is not newer than newest output", newest)
                     }
                 }
                 (Command, _) => command.push(arg),
@@ -131,28 +135,57 @@ impl Target {
     }
 }
 
+#[derive(PartialEq, PartialOrd)]
+struct File {
+    modified: SystemTime,
+    path: String,
+}
+
+impl Display for File {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.path)
+    }
+}
+
+impl File {
+    /// Return a copy of the File with the most recent modified time if newer than the current.
+    fn most_recent(&self, modified: SystemTime) -> Self {
+        Self {
+            path: self.path.to_string(),
+            modified: if modified > self.modified {
+                modified
+            } else {
+                self.modified
+            },
+        }
+    }
+}
+
 /// Recurse into directories to find the newest file.
-fn find_newest(path: &str) -> Result<SystemTime, Error> {
-    let mut newest = SystemTime::UNIX_EPOCH;
+///
+/// Returns the newest file's modified time and its path.
+fn find_newest(path: &str) -> Result<File, Error> {
+    let mut newest = File {
+        path: path.to_string(),
+        modified: SystemTime::UNIX_EPOCH,
+    };
     let metadata =
         std::fs::metadata(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
 
     if !metadata.is_dir() {
-        let modified = metadata.modified()?;
-        return if modified > newest {
-            Ok(modified)
-        } else {
-            Ok(newest)
-        };
+        let modified = metadata
+            .modified()
+            .map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
+        return Ok(newest.most_recent(modified));
     }
 
     for entry in
         std::fs::read_dir(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
     {
         if let Some(path) = entry?.path().to_str() {
-            let modified = find_newest(path)?;
-            if modified > newest {
-                newest = modified;
+            let next_file = find_newest(path)?;
+            if next_file > newest {
+                newest = next_file;
             }
         }
     }
