@@ -149,10 +149,25 @@ impl Target {
     }
 }
 
-#[derive(PartialEq, PartialOrd)]
 struct File {
     modified: SystemTime,
     path: String,
+}
+
+fn round_to_s(ts: SystemTime) -> u64 {
+    ts.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+}
+
+impl PartialEq for File {
+    fn eq(&self, other: &Self) -> bool {
+        round_to_s(self.modified) == round_to_s(other.modified) && self.path == other.path
+    }
+}
+
+impl PartialOrd for File {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(round_to_s(self.modified).cmp(&round_to_s(other.modified)))
+    }
 }
 
 impl Display for File {
