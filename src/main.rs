@@ -91,10 +91,17 @@ impl Target {
                     have_inputs = true;
                     let newest = find_newest(&arg)?;
                     if newest > newest_output {
-                        debug!("input {} is newer than newest output, rebuilding", newest);
+                        debug!(
+                            "input {} is newer than output {}, rebuilding",
+                            newest, newest_output
+                        );
                         newer = true;
                     } else {
-                        trace!("input {} is not newer than newest output", newest)
+                        trace!(
+                            "input {} is not newer than newest output {}",
+                            newest,
+                            newest_output
+                        )
                     }
                 }
                 (Command, _) => command.push(arg),
@@ -143,7 +150,7 @@ struct File {
 
 impl Display for File {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.path)
+        write!(f, "{} ({})", self.path, format_timestamp(self.modified),)
     }
 }
 
@@ -216,4 +223,10 @@ Like make, if a command is prefixed with @ it will not be echoed.
 Use MK_LOG=trace to see debug output.
 "#
     );
+}
+
+/// Format a Timestamp as the elapsed seconds, and milliseconds since the time.
+fn format_timestamp(ts: SystemTime) -> String {
+    let elapsed = ts.elapsed().unwrap();
+    format!("-{}.{:03}s", elapsed.as_secs(), elapsed.subsec_millis())
 }
