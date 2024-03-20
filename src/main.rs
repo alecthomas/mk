@@ -160,7 +160,7 @@ fn round_to_s(ts: SystemTime) -> u64 {
 
 impl PartialEq for File {
     fn eq(&self, other: &Self) -> bool {
-        round_to_s(self.modified) == round_to_s(other.modified) && self.path == other.path
+        round_to_s(self.modified) == round_to_s(other.modified)
     }
 }
 
