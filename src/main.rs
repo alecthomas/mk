@@ -1,10 +1,11 @@
+use chrono::{DateTime, Local};
 use std::{
     fmt::Display,
     io::{Error, ErrorKind},
     process::exit,
     time::SystemTime,
 };
-use tracing::{debug, trace};
+use tracing::{debug, info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// Compare timestamps of inputs and outputs, exiting with a non-zero status if
@@ -63,10 +64,8 @@ impl Target {
 
         use State::*;
 
-        let mut newest_output = File {
-            modified: SystemTime::UNIX_EPOCH,
-            path: String::new(),
-        };
+        // Option<File>
+        let mut newest_output = File::default();
         let mut command = Vec::<String>::new();
         let mut state = Output;
         let mut have_inputs = false;
@@ -78,7 +77,11 @@ impl Target {
                 (Output, _) => {
                     let newest = match find_newest(&arg) {
                         Ok(n) => n,
-                        Err(e) if e.kind() == ErrorKind::NotFound => continue,
+                        Err(e) if e.kind() == ErrorKind::NotFound => {
+                            info!("output {} does not exist", arg);
+                            newer = true;
+                            continue;
+                        }
                         Err(e) => return Err(e),
                     };
                     if newest > newest_output {
@@ -88,6 +91,9 @@ impl Target {
                 }
                 (Input, "--") => state = Command,
                 (Input, _) => {
+                    if newer {
+                        continue;
+                    }
                     have_inputs = true;
                     let newest = find_newest(&arg)?;
                     if newest > newest_output {
@@ -112,6 +118,7 @@ impl Target {
             trace!("no inputs provided, forcing rebuild");
             newer = true;
         }
+        info!("newest output is {}", newest_output);
         Ok(Target {
             command,
             needs_rebuild: newer,
@@ -151,6 +158,15 @@ struct File {
 impl Display for File {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} ({})", self.path, format_timestamp(self.modified),)
+    }
+}
+
+impl Default for File {
+    fn default() -> Self {
+        Self {
+            modified: SystemTime::UNIX_EPOCH,
+            path: String::new(),
+        }
     }
 }
 
@@ -201,15 +217,15 @@ fn find_newest(path: &str) -> Result<File, Error> {
 
 fn display_usage() {
     eprintln!(
-        r#"Usage: mk <output>... : <input>... [-- <command>...]
+        r#"One-liner `make` rules on the command-line.
 
-One-liner "make" targets on the command-line.
+Usage: `mk <output> [<output> ...] [: <input> [<input> ...]] [-- <command>...]`
 
 Compare timestamps of inputs and outputs, exiting with a non-zero status
 or executing command if any input is newer than all outputs. If an input or
 output is a directory, it is recursed into.
 
-If a command is provided it is run through "bash -c". If a single command
+If a command is provided it is run through `bash -c`. If a single command
 argument is provided it will be run as-is, otherwise all arguments will be
 joined with shell quoting.
 
@@ -218,15 +234,16 @@ eg.
     mk main.o : main.c -- cc -c main.c && \
         mk main : main.o -- cc -o main main.o
 
-Like make, if a command is prefixed with @ it will not be echoed.
+Like make, if a command is prefixed with `@` it will not be echoed.
 
-Use MK_LOG=trace to see debug output.
+Use `MK_LOG=trace` to see debug output.
 "#
     );
 }
 
 /// Format a Timestamp as the elapsed seconds, and milliseconds since the time.
 fn format_timestamp(ts: SystemTime) -> String {
-    let elapsed = ts.elapsed().unwrap();
-    format!("-{}.{:03}s", elapsed.as_secs(), elapsed.subsec_millis())
+    let ts: DateTime<Local> = ts.into();
+    let elapsed = Local::now().signed_duration_since(ts);
+    format!("{}s", elapsed)
 }
