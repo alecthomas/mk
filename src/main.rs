@@ -1,10 +1,10 @@
-use chrono::{DateTime, Local};
 use std::{
     fmt::Display,
     io::{Error, ErrorKind},
     process::exit,
     time::SystemTime,
 };
+use time::OffsetDateTime;
 use tracing::{debug, info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -258,7 +258,6 @@ Use `MK_LOG=trace` to see debug output.
 
 /// Format a Timestamp as the elapsed seconds, and milliseconds since the time.
 fn format_timestamp(ts: SystemTime) -> String {
-    let ts: DateTime<Local> = ts.into();
-    let elapsed = Local::now().signed_duration_since(ts);
-    format!("{}s", elapsed)
+    let elapsed = OffsetDateTime::now_utc() - OffsetDateTime::from(ts);
+    format!("{elapsed:.3}")
 }

@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-chrono = "0.4.35"
 shell-words = "1.1.0"
 time = "0.3.34"
 tracing = "0.1.40"
