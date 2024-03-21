@@ -1,12 +1,13 @@
-use std::{
-    fmt::Display,
-    io::{Error, ErrorKind},
-    process::exit,
-    time::SystemTime,
-};
-use time::OffsetDateTime;
+mod error;
+mod file;
+
+use crate::Error::NotFound;
+use error::{from_io_error, from_walkdir_error, Error};
+use file::File;
+use std::{path::PathBuf, process::exit, time::SystemTime};
 use tracing::{debug, info, trace};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use walkdir::WalkDir;
 
 /// Compare timestamps of inputs and outputs, exiting with a non-zero status if
 /// any input is newer than all outputs.
@@ -76,13 +77,13 @@ impl Target {
                 (Output, ":") => state = Input,
                 (Output, _) => {
                     let newest = match find_newest(&arg) {
-                        Ok(n) => n,
-                        Err(e) if e.kind() == ErrorKind::NotFound => {
-                            info!("output {} does not exist", arg);
+                        Err(NotFound(path)) => {
+                            info!("output {} does not exist", path.display());
                             newer = true;
                             continue;
                         }
                         Err(e) => return Err(e),
+                        Ok(n) => n,
                     };
                     if newest > newest_output {
                         debug!("{} is the newest output", newest);
@@ -114,11 +115,15 @@ impl Target {
             }
         }
         // Always rebuild if no inputs are provided.
-        if !have_inputs {
+        if !have_inputs && !newer {
             trace!("no inputs provided, forcing rebuild");
             newer = true;
         }
-        info!("newest output is {}", newest_output);
+        if newest_output == File::default() {
+            info!("no outputs found");
+        } else {
+            info!("newest output is {}", newest_output);
+        }
         Ok(Target {
             command,
             needs_rebuild: newer,
@@ -149,82 +154,25 @@ impl Target {
     }
 }
 
-struct File {
-    modified: SystemTime,
-    path: String,
-}
-
-fn round_to_s(ts: SystemTime) -> u64 {
-    ts.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
-}
-
-impl PartialEq for File {
-    fn eq(&self, other: &Self) -> bool {
-        round_to_s(self.modified) == round_to_s(other.modified)
-    }
-}
-
-impl PartialOrd for File {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(round_to_s(self.modified).cmp(&round_to_s(other.modified)))
-    }
-}
-
-impl Display for File {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ({})", self.path, format_timestamp(self.modified),)
-    }
-}
-
-impl Default for File {
-    fn default() -> Self {
-        Self {
-            modified: SystemTime::UNIX_EPOCH,
-            path: String::new(),
-        }
-    }
-}
-
-impl File {
-    /// Return a copy of the File with the most recent modified time if newer than the current.
-    fn most_recent(&self, modified: SystemTime) -> Self {
-        Self {
-            path: self.path.to_string(),
-            modified: if modified > self.modified {
-                modified
-            } else {
-                self.modified
-            },
-        }
-    }
-}
-
 /// Recurse into directories to find the newest file.
 ///
 /// Returns the newest file's modified time and its path.
 fn find_newest(path: &str) -> Result<File, Error> {
     let mut newest = File {
-        path: path.to_string(),
+        path: PathBuf::from(path),
         modified: SystemTime::UNIX_EPOCH,
     };
-    let metadata =
-        std::fs::metadata(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
+    for entry in WalkDir::new(path) {
+        let entry = entry.map_err(from_walkdir_error(PathBuf::from(path)))?;
+        let path = entry.path().to_path_buf();
+        let metadata = entry.metadata().map_err(from_walkdir_error(path.clone()))?;
+        if !metadata.is_file() {
+            continue;
+        }
+        let modified = metadata.modified().map_err(from_io_error(path.clone()))?;
 
-    if !metadata.is_dir() {
-        let modified = metadata
-            .modified()
-            .map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?;
-        return Ok(newest.most_recent(modified));
-    }
-
-    for entry in
-        std::fs::read_dir(path).map_err(|e| Error::new(e.kind(), format!("{path}: {e}")))?
-    {
-        if let Some(path) = entry?.path().to_str() {
-            let next_file = find_newest(path)?;
-            if next_file > newest {
-                newest = next_file;
-            }
+        if modified > newest.modified {
+            newest = File { path, modified };
         }
     }
     Ok(newest)
@@ -254,10 +202,4 @@ Like make, if a command is prefixed with `@` it will not be echoed.
 Use `MK_LOG=trace` to see debug output.
 "#
     );
-}
-
-/// Format a Timestamp as the elapsed seconds, and milliseconds since the time.
-fn format_timestamp(ts: SystemTime) -> String {
-    let elapsed = OffsetDateTime::now_utc() - OffsetDateTime::from(ts);
-    format!("{elapsed:.3}")
 }

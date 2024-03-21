@@ -8,3 +8,4 @@ shell-words = "1.1.0"
 time = "0.3.34"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+walkdir = "2.5.0"
