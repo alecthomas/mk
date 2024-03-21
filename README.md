@@ -1,6 +1,6 @@
-# One-liner "make" targets on the command-line.
+# One-liner `make` rules on the command-line.
 
-Usage: `mk <output>... : <input>... [-- <command>...]`
+Usage: `mk <output> [<output> ...] [: <input> [<input> ...]] [-- <command>...]`
 
 Compare timestamps of inputs and outputs, exiting with a non-zero status
 or executing command if any input is newer than all outputs. If an input or
@@ -15,6 +15,7 @@ eg.
     mk main.o : main.c -- cc -c main.c && \
         mk main : main.o -- cc -o main main.o
 
-Like make, if a command is prefixed with @ it will not be echoed.
+Like make, if a command is prefixed with `@` it will not be echoed.
 
 Use `MK_LOG=trace` to see debug output.
+

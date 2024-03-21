@@ -1,6 +1,7 @@
 use std::{fmt::Display, io::ErrorKind, path::PathBuf};
 
 /// Error type for this program.
+#[derive(Debug)]
 pub enum Error {
     /// File not found.
     NotFound(PathBuf),
