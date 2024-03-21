@@ -138,11 +138,13 @@ fn find_newest(path: &str) -> Result<File, Error> {
 
 #[cfg(test)]
 mod tests {
+    use tempfile::tempdir;
+
     use super::*;
 
     #[test]
     fn test_target() {
-        let tmp_dir = tempdir::TempDir::new("mk").unwrap();
+        let tmp_dir = tempdir().unwrap();
 
         let src = tmp_dir.path().join("a.c");
         let dest = tmp_dir.path().join("a.out");

@@ -11,4 +11,4 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 walkdir = "2.5.0"
 
 [dev-dependencies]
-tempdir = "0.3.7"
+tempfile = "3.10.1"
