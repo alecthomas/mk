@@ -28,7 +28,7 @@ impl Target {
         let mut command = Vec::<String>::new();
         let mut state = Output;
         let mut have_inputs = false;
-        let mut newer = false;
+        let mut needs_rebuild = false;
 
         for arg in args {
             match (&state, arg.as_str()) {
@@ -37,7 +37,7 @@ impl Target {
                     let newest = match find_newest(&arg) {
                         Err(NotFound(path)) => {
                             info!("output {} does not exist", path.display());
-                            newer = true;
+                            needs_rebuild = true;
                             continue;
                         }
                         Err(e) => return Err(e),
@@ -50,7 +50,7 @@ impl Target {
                 }
                 (Input, "--") => state = Command,
                 (Input, _) => {
-                    if newer {
+                    if needs_rebuild {
                         continue;
                     }
                     have_inputs = true;
@@ -60,7 +60,7 @@ impl Target {
                             "input {} is newer than output {}, rebuilding",
                             newest, newest_output
                         );
-                        newer = true;
+                        needs_rebuild = true;
                     } else {
                         trace!(
                             "input {} is not newer than newest output {}",
@@ -73,9 +73,9 @@ impl Target {
             }
         }
         // Always rebuild if no inputs are provided.
-        if !have_inputs && !newer {
+        if !have_inputs && !needs_rebuild {
             trace!("no inputs provided, forcing rebuild");
-            newer = true;
+            needs_rebuild = true;
         }
         if newest_output == File::default() {
             info!("no outputs found");
@@ -84,7 +84,7 @@ impl Target {
         }
         Ok(Target {
             command,
-            needs_rebuild: newer,
+            needs_rebuild,
         })
     }
 
@@ -120,7 +120,7 @@ fn find_newest(path: &str) -> Result<File, Error> {
         path: PathBuf::from(path),
         modified: SystemTime::UNIX_EPOCH,
     };
-    for entry in WalkDir::new(path) {
+    for entry in WalkDir::new(path).follow_links(true) {
         let entry = entry.map_err(from_walkdir_error(PathBuf::from(path)))?;
         let path = entry.path().to_path_buf();
         let metadata = entry.metadata().map_err(from_walkdir_error(path.clone()))?;
