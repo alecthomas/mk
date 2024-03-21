@@ -1,0 +1,26 @@
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+name: CI
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: cashapp/activate-hermit@v1
+        with:
+          cache: true
+      - run: cargo fmt -- --check
+      - run: cargo clippy -- -D warnings
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: cashapp/activate-hermit@v1
+        with:
+          cache: true
+      - run: cargo test
