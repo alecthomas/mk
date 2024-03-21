@@ -136,37 +136,42 @@ fn find_newest(path: &str) -> Result<File, Error> {
     Ok(newest)
 }
 
-#[test]
-fn test_target() {
-    let tmp_dir = tempdir::TempDir::new("mk").unwrap();
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let src = tmp_dir.path().join("a.c");
-    let dest = tmp_dir.path().join("a.out");
+    #[test]
+    fn test_target() {
+        let tmp_dir = tempdir::TempDir::new("mk").unwrap();
 
-    std::fs::write(&src, "int main() { return 0; }").unwrap();
+        let src = tmp_dir.path().join("a.c");
+        let dest = tmp_dir.path().join("a.out");
 
-    let target = Target::parse(
-        [
-            "target/debug/mk",
-            dest.to_str().unwrap(),
-            ":",
-            src.to_str().unwrap(),
-            "--",
-            "cc",
-            "-o",
-            dest.to_str().unwrap(),
-            src.to_str().unwrap(),
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect(),
-    );
-    let target = match target {
-        Err(e) => panic!("{}", e),
-        Ok(t) => t,
-    };
-    assert!(target.needs_rebuild);
-    assert!(target.should_run_command());
-    assert_eq!(target.run_command().unwrap(), 0);
-    assert!(std::fs::metadata(&dest).is_ok());
+        std::fs::write(&src, "int main() { return 0; }").unwrap();
+
+        let target = Target::parse(
+            [
+                "target/debug/mk",
+                dest.to_str().unwrap(),
+                ":",
+                src.to_str().unwrap(),
+                "--",
+                "cc",
+                "-o",
+                dest.to_str().unwrap(),
+                src.to_str().unwrap(),
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        );
+        let target = match target {
+            Err(e) => panic!("{}", e),
+            Ok(t) => t,
+        };
+        assert!(target.needs_rebuild);
+        assert!(target.should_run_command());
+        assert_eq!(target.run_command().unwrap(), 0);
+        assert!(std::fs::metadata(&dest).is_ok());
+    }
 }
