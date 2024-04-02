@@ -2,7 +2,6 @@ mod error;
 mod file;
 mod target;
 
-use error::{from_io_error, from_walkdir_error, Error};
 use file::File;
 use std::process::exit;
 use target::Target;

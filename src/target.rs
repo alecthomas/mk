@@ -1,9 +1,8 @@
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use crate::Error::NotFound;
+use crate::error::{Error, ResultExt};
 use crate::File;
-use crate::{from_io_error, from_walkdir_error, Error};
 use tracing::{debug, info, trace};
 use walkdir::WalkDir;
 
@@ -35,8 +34,8 @@ impl Target {
                 (Output, ":") => state = Input,
                 (Output, _) => {
                     let newest = match find_newest(&arg) {
-                        Err(NotFound(path)) => {
-                            info!("output {} does not exist", path.display());
+                        Err(e) if e.is_not_found() => {
+                            info!("output {} does not exist", arg);
                             needs_rebuild = true;
                             continue;
                         }
@@ -121,13 +120,13 @@ fn find_newest(path: &str) -> Result<File, Error> {
         modified: SystemTime::UNIX_EPOCH,
     };
     for entry in WalkDir::new(path).follow_links(true) {
-        let entry = entry.map_err(from_walkdir_error(PathBuf::from(path)))?;
+        let entry = entry.map_err_path_context(path)?;
         let path = entry.path().to_path_buf();
-        let metadata = entry.metadata().map_err(from_walkdir_error(path.clone()))?;
+        let metadata = entry.metadata().map_err_path_context(path.clone())?;
         if !metadata.is_file() {
             continue;
         }
-        let modified = metadata.modified().map_err(from_io_error(path.clone()))?;
+        let modified = metadata.modified().map_err_path_context(path.clone())?;
 
         if modified > newest.modified {
             newest = File { path, modified };
