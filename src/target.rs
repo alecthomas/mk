@@ -137,42 +137,136 @@ fn find_newest(path: &str) -> Result<File, Error> {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::tempdir;
+    use std::time::Duration;
+
+    use tempfile::{tempdir, TempDir};
 
     use super::*;
 
+    #[derive(Debug, Clone, Copy)]
+    enum InputCase {
+        None,
+        Old,
+        Equal,
+        New,
+    }
+
+    impl InputCase {
+        fn permute_time(&self, time: SystemTime) -> SystemTime {
+            match self {
+                InputCase::Old => time - Duration::from_secs(1),
+                InputCase::Equal | InputCase::None => time,
+                InputCase::New => time + Duration::from_secs(1),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum OutputCase {
+        None,
+        Missing,
+        Some,
+    }
+
+    fn all_test_cases() -> Vec<(InputCase, OutputCase)> {
+        let input_cases = [
+            InputCase::None,
+            InputCase::Old,
+            InputCase::Equal,
+            InputCase::New,
+        ];
+        let output_cases = [OutputCase::None, OutputCase::Missing, OutputCase::Some];
+
+        input_cases
+            .into_iter()
+            .flat_map(|ic| output_cases.map(|oc| (ic, oc)))
+            .collect()
+    }
+
+    fn setup_test_case(tempdir: &TempDir, ic: InputCase, oc: OutputCase) -> Vec<String> {
+        let now = SystemTime::now() - Duration::from_secs(60); // Back in time so avoid flaky tests
+        let mut args = vec![];
+
+        // Setup the output...
+        let output_path = tempdir
+            .path()
+            .join("output-file")
+            .to_str()
+            .unwrap()
+            .to_owned();
+
+        match oc {
+            OutputCase::None => (),
+            OutputCase::Missing => args.push(output_path.clone()),
+            OutputCase::Some => {
+                std::fs::File::create_new(&output_path)
+                    .unwrap()
+                    .set_modified(now)
+                    .unwrap();
+                args.push(output_path.clone());
+            }
+        }
+
+        // Setup the input...
+        args.push(":".into());
+        let input_path = tempdir
+            .path()
+            .join("input-file")
+            .to_str()
+            .unwrap()
+            .to_owned();
+
+        match ic {
+            InputCase::None => (),
+            ic @ _ => {
+                std::fs::File::create_new(&input_path)
+                    .unwrap()
+                    .set_modified(ic.permute_time(now))
+                    .unwrap();
+                args.push(input_path);
+            }
+        }
+
+        args.push("--".into());
+        args.push("touch".into());
+        args.push(output_path.into());
+
+        args
+    }
+
+    fn check_build(args: &Vec<String>, expected_needs_build: bool) {
+        let target = Target::parse(args.clone()).unwrap();
+        assert_eq!(target.needs_rebuild, expected_needs_build);
+        assert_eq!(target.should_run_command(), expected_needs_build);
+
+        let expected_code = 0;
+        let actual_code = target.run_command().unwrap();
+        assert_eq!(actual_code, expected_code);
+    }
+
+    #[tracing_test::traced_test]
     #[test]
-    fn test_target() {
-        let tmp_dir = tempdir().unwrap();
+    fn test_needs_rebuild() {
+        for case in all_test_cases() {
+            let tempdir = tempdir().unwrap();
+            let args = setup_test_case(&tempdir, case.0, case.1);
 
-        let src = tmp_dir.path().join("a.c");
-        let dest = tmp_dir.path().join("a.out");
+            let expected_needs_build = match case {
+                (_, OutputCase::None | OutputCase::Missing) => true,
+                (InputCase::None, _) => true,
+                (InputCase::New, OutputCase::Some) => true,
+                (InputCase::Old | InputCase::Equal, OutputCase::Some) => false,
+            };
+            check_build(&args, expected_needs_build);
 
-        std::fs::write(&src, "int main() { return 0; }").unwrap();
-
-        let target = Target::parse(
-            [
-                "target/debug/mk",
-                dest.to_str().unwrap(),
-                ":",
-                src.to_str().unwrap(),
-                "--",
-                "cc",
-                "-o",
-                dest.to_str().unwrap(),
-                src.to_str().unwrap(),
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
-        );
-        let target = match target {
-            Err(e) => panic!("{}", e),
-            Ok(t) => t,
-        };
-        assert!(target.needs_rebuild);
-        assert!(target.should_run_command());
-        assert_eq!(target.run_command().unwrap(), 0);
-        assert!(std::fs::metadata(&dest).is_ok());
+            let expected_needs_rebuild = match case {
+                (_, OutputCase::None) => true,
+                (InputCase::None, _) => true,
+                (_, OutputCase::Missing) => false, // We built, so no rebuild
+                (InputCase::New, OutputCase::Some) => false, // We built, so no rebuild
+                (InputCase::Old | InputCase::Equal, OutputCase::Some) => false, // No build, so no rebuild
+            };
+            check_build(&args, expected_needs_rebuild);
+        }
     }
 }
