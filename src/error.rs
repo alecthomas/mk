@@ -1,43 +1,47 @@
 use std::{fmt::Display, io::ErrorKind, path::PathBuf};
 
-/// Error type for this program.
+/// An error type that can hold a `PathBuf`` as an optional context to an `io::Error`.
 #[derive(Debug)]
-pub enum Error {
-    /// File not found.
-    NotFound(PathBuf),
-    Other(String),
+pub struct Error {
+    path: Option<PathBuf>,
+    inner: std::io::Error,
 }
-use Error::*;
 
-pub fn from_io_error(path: PathBuf) -> impl Fn(std::io::Error) -> Error {
-    move |e: std::io::Error| -> Error {
-        match e.kind() {
-            ErrorKind::NotFound => NotFound(path.clone()),
-            _ => Other(e.to_string()),
-        }
+impl Error {
+    pub fn is_not_found(&self) -> bool {
+        self.inner.kind() == ErrorKind::NotFound && self.path.is_some()
     }
 }
 
-pub fn from_walkdir_error(path: PathBuf) -> impl Fn(walkdir::Error) -> Error {
-    move |e: walkdir::Error| -> Error {
-        match e.io_error() {
-            Some(_) => NotFound(path.clone()),
-            None => Other(e.to_string()),
+impl<E: Into<std::io::Error>> From<E> for Error {
+    fn from(value: E) -> Self {
+        Self {
+            path: None,
+            inner: value.into(),
         }
     }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NotFound(path) => write!(f, "file not found: {}", path.display()),
-            Other(msg) => write!(f, "{msg}"),
+        if self.is_not_found() {
+            let path = self.path.as_ref().unwrap().display();
+            write!(f, "file not found: {path}")
+        } else {
+            self.inner.fmt(f)
         }
     }
 }
 
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Other(e.to_string())
+pub trait ResultExt<T> {
+    fn map_err_path_context(self, path: impl Into<PathBuf>) -> Result<T, Error>;
+}
+
+impl<T, E: Into<std::io::Error>> ResultExt<T> for std::result::Result<T, E> {
+    fn map_err_path_context(self, path: impl Into<PathBuf>) -> Result<T, Error> {
+        self.map_err(|e| Error {
+            path: Some(path.into()),
+            inner: e.into(),
+        })
     }
 }
