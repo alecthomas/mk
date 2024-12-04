@@ -2,6 +2,7 @@ mod error;
 mod file;
 mod target;
 
+use crate::error::Error;
 use file::File;
 use std::process::exit;
 use target::Target;
@@ -28,24 +29,28 @@ fn main() {
     }
 
     let target = Target::parse(args).unwrap_or_else(|e| {
-        eprintln!("{}", e);
+        eprintln!("mk: error: {}", e);
         exit(1);
     });
     if !target.should_run_command() {
         debug!("Nothing to do.");
-        exit(target.needs_rebuild.into());
+        exit(0);
     }
 
-    let code = target.run_command().unwrap_or_else(|e| {
-        eprintln!("{}", e);
-        exit(1);
-    });
-    exit(code);
+    match target.run_command() {
+        Ok(()) => exit(0),
+        Err(Error::CommandFailed(code)) => exit(code),
+        Err(e) => {
+            eprintln!("mk: error: {}", e);
+            exit(1);
+        }
+    }
 }
 
-const USAGE: &str = r#"# One-liner `make` rules on the command-line.
-
+const USAGE: &str = r#"
 Usage: `mk <output> [<output> ...] [: <input> [<input> ...]] [-- <command>...]`
+
+One-liner `make` rules on the command-line.
 
 Compare timestamps of inputs and outputs, exiting with a non-zero status
 or executing command if any input is newer than all outputs. If an input or
@@ -64,3 +69,6 @@ Like make, if a command is prefixed with `@` it will not be echoed.
 
 Use `MK_LOG=trace` to see debug output.
 "#;
+
+#[cfg(test)]
+mod main_test;
