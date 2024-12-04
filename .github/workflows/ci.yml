@@ -23,4 +23,5 @@ jobs:
       - uses: cashapp/activate-hermit@v1
         with:
           cache: true
+      - run: cargo build
       - run: cargo test
