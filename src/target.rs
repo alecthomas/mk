@@ -18,10 +18,10 @@ impl Target {
     pub fn parse(args: Vec<String>) -> Result<Target, Error> {
         // Option<File>
         let mut newest_output = File::default();
-        let mut needs_rebuild = false;
         let mut outputs = Vec::new();
         let mut inputs = Vec::new();
         let mut command = Vec::new();
+        let mut needs_rebuild = false;
 
         let mut current_vec = &mut outputs;
         for arg in args {
@@ -32,13 +32,17 @@ impl Target {
             }
         }
 
+        if outputs.is_empty() {
+            return Err(Error::MissingOutputs);
+        }
+
         // Find latest output
         for output in outputs.iter() {
             let newest = match find_newest(output) {
                 Err(e) if e.is_not_found() => {
-                    info!("output {} does not exist", output);
+                    info!(r#"output "{}" does not exist, rebuilding"#, output);
                     needs_rebuild = true;
-                    continue;
+                    break;
                 }
                 Err(e) => return Err(e),
                 Ok(n) => n,
@@ -47,14 +51,6 @@ impl Target {
                 debug!("{} is the newest output", newest);
                 newest_output = newest
             }
-        }
-
-        if !needs_rebuild {
-            return Ok(Target {
-                outputs,
-                command,
-                needs_rebuild,
-            });
         }
 
         for input in inputs.iter() {
@@ -70,8 +66,11 @@ impl Target {
                     "input {} is newer than output {}, rebuilding",
                     newest, newest_output
                 );
-                needs_rebuild = true;
-                break;
+                return Ok(Target {
+                    outputs,
+                    command,
+                    needs_rebuild: true,
+                });
             } else {
                 trace!(
                     "input {} is older than newest output {}",
@@ -81,11 +80,6 @@ impl Target {
             }
         }
 
-        // Always rebuild if no inputs are provided.
-        if inputs.is_empty() && !needs_rebuild {
-            trace!("no inputs provided, forcing rebuild");
-            needs_rebuild = true;
-        }
         if newest_output == File::default() {
             info!("no outputs found");
             if command.is_empty() {

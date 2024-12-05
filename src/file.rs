@@ -23,7 +23,7 @@ impl Display for File {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} ({})",
+            "\"{}\" ({})",
             self.path.display(),
             format_timestamp(self.modified),
         )
@@ -45,6 +45,8 @@ fn format_timestamp(ts: SystemTime) -> String {
     format!("{elapsed:.3}")
 }
 
-fn round_to_s(ts: SystemTime) -> u64 {
-    ts.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()
+fn round_to_s(ts: SystemTime) -> u128 {
+    ts.duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
 }

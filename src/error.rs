@@ -5,6 +5,7 @@ pub enum Error {
     CommandFailed(i32),
     MissingInput(String),
     MissingOutput(String),
+    MissingOutputs,
     IO(PathBuf, std::io::Error),
 }
 
@@ -27,6 +28,7 @@ impl Display for Error {
             Error::MissingOutput(path) => {
                 write!(f, r#"output "{path}" was not created"#)
             }
+            Error::MissingOutputs => write!(f, "no outputs were specified"),
             Error::MissingInput(path) => write!(f, r#"input "{path}" does not exist"#),
         }
     }

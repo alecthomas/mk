@@ -66,7 +66,7 @@ fn test_mk_output_with_no_input_or_command() {
 }
 
 #[test]
-fn test_mk_no_input_never_rebuilds() {
+fn test_mk_no_input_doesnt_rebuild() {
     let tmpdir = tempdir().unwrap();
     assert_mk_ok(&tmpdir, &["output", "--", "touch", "output"]);
     assert_exists(&tmpdir, "output");
@@ -76,21 +76,47 @@ fn test_mk_no_input_never_rebuilds() {
     assert_eq!(old_time, new_time);
 }
 
+#[test]
+fn test_mk_input_is_dir() {
+    let tmpdir = tempdir().unwrap();
+    mkdir(&tmpdir, "input");
+    touch(&tmpdir, "input/input");
+    assert_mk_ok(&tmpdir, &["output", ":", "input", "--", "touch", "output"]);
+    assert_exists(&tmpdir, "output");
+    let before = file_time(&tmpdir, "output");
+    touch(&tmpdir, "input/input");
+    assert_mk_ok(&tmpdir, &["output", ":", "input", "--", "touch", "output"]);
+    assert_exists(&tmpdir, "output");
+    let after = file_time(&tmpdir, "output");
+    assert!(before < after);
+}
+
 #[track_caller]
 fn assert_mk_ok(tmpdir: &TempDir, args: &[&str]) {
     let mut cmd = Command::cargo_bin("mk").unwrap();
+    cmd.env("MK_LOG", "trace");
     cmd.current_dir(tmpdir);
     cmd.args(args);
-    cmd.assert().success();
+    let output = cmd.assert().get_output().clone();
+    let stdout = String::from_utf8(output.stdout.clone()).unwrap();
+    println!("{}", stdout);
+    let stderr = String::from_utf8(output.stderr.clone()).unwrap();
+    eprintln!("{}", stderr);
+    assert_eq!(output.status.code().unwrap(), 0);
 }
 
 #[track_caller]
 fn assert_mk_fails(tmpdir: &TempDir, args: &[&str]) {
     let mut cmd = Command::cargo_bin("mk").unwrap();
     cmd.current_dir(tmpdir);
+    cmd.env("MK_LOG", "trace");
     cmd.args(args);
-    let assert = cmd.assert().failure();
-    println!("{:?}", assert.get_output());
+    let output = cmd.assert().get_output().clone();
+    let stdout = String::from_utf8(output.stdout.clone()).unwrap();
+    println!("{}", stdout);
+    let stderr = String::from_utf8(output.stderr.clone()).unwrap();
+    eprintln!("{}", stderr);
+    assert_ne!(output.status.code().unwrap(), 0);
 }
 
 #[track_caller]
@@ -106,8 +132,13 @@ fn assert_not_exists(tmpdir: &TempDir, path: &str) {
 }
 
 #[track_caller]
+fn mkdir(tmpdir: &TempDir, path: &str) {
+    std::fs::create_dir(tmpdir.path().join(path)).unwrap();
+}
+
+#[track_caller]
 fn touch(tmpdir: &TempDir, path: &str) {
-    std::fs::File::create_new(tmpdir.path().join(path))
+    std::fs::File::create(tmpdir.path().join(path))
         .unwrap()
         .set_modified(std::time::SystemTime::now())
         .unwrap();
