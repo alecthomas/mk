@@ -25,9 +25,7 @@ impl Display for Error {
         match self {
             Error::CommandFailed(code) => write!(f, "command failed with code {code}"),
             Error::IO(path, e) => write!(f, "{e} at {path:?}"),
-            Error::MissingOutput(path) => {
-                write!(f, r#"output "{path}" was not created"#)
-            }
+            Error::MissingOutput(path) => write!(f, r#"output "{path}" was not created"#),
             Error::MissingOutputs => write!(f, "no outputs were specified"),
             Error::MissingInput(path) => write!(f, r#"input "{path}" does not exist"#),
         }
