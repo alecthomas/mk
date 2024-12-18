@@ -8,12 +8,18 @@ concurrency:
   cancel-in-progress: true
 name: Release
 jobs:
-  build-linux:
-    name: Build ${{ matrix.target }}
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.arch }}-${{ matrix.target-suffix }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu]
+        os: [ubuntu-latest, macos-latest]
+        arch: [x86_64, aarch64]
+        include:
+          - os: ubuntu-latest
+            target-suffix: unknown-linux-gnu
+          - os: macos-latest
+            target-suffix: apple-darwin
     steps:
       - uses: actions/checkout@v4
       - uses: cashapp/activate-hermit@v1
@@ -22,50 +28,23 @@ jobs:
       - id: build
         shell: bash
         run: |
-          rustup install stable
-          rustup target add ${{ matrix.target }}
-          cargo build --release --target ${{ matrix.target }}
-          export TARGET_PATH=target/${{ matrix.target }}/release/mk-${{ matrix.target }}
-          mv target/${{ matrix.target }}/release/mk ${TARGET_PATH}
+          export TARGET=${{ matrix.arch }}-${{ matrix.target-suffix }}
+          rustup target add "${TARGET}"
+          cross build --release --target ${TARGET}
+          export TARGET_PATH=target/${TARGET}/release/mk-${TARGET}
+          mv target/${TARGET}/release/mk ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
-          name: mk-${{ matrix.target }}
-          path: ${{ steps.build.outputs.TARGET_PATH }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  build-macos:
-    name: Build ${{ matrix.target }}
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        target: [aarch64-apple-darwin, x86_64-apple-darwin]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cashapp/activate-hermit@v1
-        with:
-          cache: true
-      - id: build
-        shell: bash
-        run: |
-          rustup install stable
-          rustup target add ${{ matrix.target }}
-          cargo build --release --target ${{ matrix.target }}
-          export TARGET_PATH=target/${{ matrix.target }}/release/mk-${{ matrix.target }}
-          mv target/${{ matrix.target }}/release/mk ${TARGET_PATH}
-          bzip2 -f9 ${TARGET_PATH}
-          echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mk-${{ matrix.target }}
+          name: mk-${{ matrix.arch }}-${{ matrix.target-suffix }}
           path: ${{ steps.build.outputs.TARGET_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [build-linux, build-macos]
+    needs: [build]
     permissions:
       contents: write
     steps:

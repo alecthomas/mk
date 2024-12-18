@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+
+test -x .hermit/rust/bin/cross || cargo install cross --git https://github.com/cross-rs/cross
+exec .hermit/rust/bin/cross "$@"
