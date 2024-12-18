@@ -3,11 +3,34 @@ mod file;
 mod target;
 
 use crate::error::Error;
+use clap::Parser;
 use file::File;
 use std::process::exit;
 use target::Target;
-use tracing::debug;
+use tracing::{debug, level_filters::LevelFilter, Level};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+#[derive(Parser, Debug)]
+#[command(version, long_about = USAGE)]
+struct Args {
+    #[arg(
+        long,
+        short = 'C',
+        value_name = "DIR",
+        default_value = ".",
+        help = "Change to directory DIR before doing anything"
+    )]
+    chdir: String,
+    #[arg(long, default_value = "error", help = "Set log level")]
+    log_level: Level,
+    #[arg(
+        trailing_var_arg = true,
+        allow_hyphen_values = true,
+        required = true,
+        value_name = "OUTPUT ... [: INPUT ...] [-- COMMAND ...]"
+    )]
+    args: Vec<String>,
+}
 
 /// Compare timestamps of inputs and outputs, exiting with a non-zero status if
 /// any input is newer than all outputs.
@@ -17,18 +40,28 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 /// arguments after it are executed as a command if any input is newer than all
 /// outputs.
 fn main() {
+    let args = Args::parse();
+    // Chdir before doing anything.
+    if let Err(e) = std::env::set_current_dir(&args.chdir) {
+        eprintln!("mk: error: chdir failed: {}: {}", args.chdir, e);
+        exit(1);
+    }
     tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::from_env("MK_LOG"))
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::from_level(args.log_level).into())
+                .with_env_var("MK_LOG")
+                .from_env_lossy(),
+        )
         .init();
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.is_empty() {
+    if args.args.is_empty() {
         println!("{}", USAGE);
         exit(0);
     }
 
-    let target = Target::parse(args).unwrap_or_else(|e| {
+    let target = Target::parse(args.args).unwrap_or_else(|e| {
         eprintln!("mk: error: {}", e);
         exit(1);
     });
@@ -48,8 +81,6 @@ fn main() {
 }
 
 const USAGE: &str = r#"
-Usage: `mk <output> [<output> ...] [: <input> [<input> ...]] [-- <command>...]`
-
 One-liner `make` rules on the command-line.
 
 Compare timestamps of inputs and outputs, exiting with a non-zero status
@@ -67,7 +98,7 @@ eg.
 
 Like make, if a command is prefixed with `@` it will not be echoed.
 
-Use `MK_LOG=trace` to see debug output.
+Use `MK_LOG=trace` or `--log-level=trace` to see debug output.
 "#;
 
 #[cfg(test)]
