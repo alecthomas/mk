@@ -1,7 +1,5 @@
 # One-liner `make` rules on the command-line.
 
-One-liner `make` rules on the command-line.
-
 Compare timestamps of inputs and outputs, exiting with a non-zero status
 or executing command if any input is newer than all outputs. If an input or
 output is a directory, it is recursed into.
@@ -19,7 +17,7 @@ Like make, if a command is prefixed with `@` it will not be echoed.
 
 Use `MK_LOG=trace` or `--log-level=trace` to see debug output.
 
-
+```
 Usage: mk [OPTIONS] <OUTPUT ... [: INPUT ...] [-- COMMAND ...]>...
 
 Arguments:
@@ -42,3 +40,4 @@ Options:
 
   -V, --version
           Print version
+```
