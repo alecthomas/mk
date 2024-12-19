@@ -2,6 +2,14 @@ use assert_cmd::Command;
 use tempfile::{tempdir, TempDir};
 
 #[test]
+fn test_mk_chdir() {
+    let tmpdir = tempdir().unwrap();
+    mkdir(&tmpdir, "dir");
+    assert_mk_ok(&tmpdir, &["-C", "dir", "output", "--", "touch", "output"]);
+    assert_exists(&tmpdir, "dir/output");
+}
+
+#[test]
 fn test_mk_ok() {
     let tmpdir = tempdir().unwrap();
     touch(&tmpdir, "input");
