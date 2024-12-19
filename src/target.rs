@@ -102,7 +102,7 @@ impl Target {
 
     // Run the command and verify that all outputs exist.
     // Will not display the command if it is prefixed with `@`.
-    pub fn run_command(&self) -> Result<(), Error> {
+    pub fn run_command(&self, chdir: &str) -> Result<(), Error> {
         let mut shell_command = if self.command.len() > 1 {
             shell_words::join(&self.command)
         } else {
@@ -112,6 +112,9 @@ impl Target {
         if shell_command.starts_with('@') {
             shell_command = shell_command[1..].to_string();
         } else {
+            if !chdir.is_empty() && chdir != "." {
+                print!("cd {} && ", shell_words::quote(chdir));
+            }
             println!("{}", &shell_command);
         }
         let status = std::process::Command::new("bash")

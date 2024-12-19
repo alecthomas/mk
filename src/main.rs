@@ -70,7 +70,7 @@ fn main() {
         exit(0);
     }
 
-    match target.run_command() {
+    match target.run_command(args.chdir.as_str()) {
         Ok(()) => exit(0),
         Err(Error::CommandFailed(code)) => exit(code),
         Err(e) => {
