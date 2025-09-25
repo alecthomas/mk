@@ -21,7 +21,7 @@ jobs:
           - os: macos-latest
             target-suffix: apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: cashapp/activate-hermit@v1
         with:
           cache: true
