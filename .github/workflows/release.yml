@@ -35,7 +35,7 @@ jobs:
           mv target/${TARGET}/release/mk ${TARGET_PATH}
           bzip2 -f9 ${TARGET_PATH}
           echo "TARGET_PATH=${TARGET_PATH}.bz2" >> $GITHUB_OUTPUT
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mk-${{ matrix.arch }}-${{ matrix.target-suffix }}
           path: ${{ steps.build.outputs.TARGET_PATH }}
@@ -48,7 +48,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
       - uses: ncipollo/release-action@v1
